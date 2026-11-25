@@ -1,70 +1,52 @@
 // SPDX-License-Identifier: MIT
-// HalfDone — Absurd Micro-Startup Pitch-Off entry (remake).
+// HalfDone — a resale market for jobs agents never finish.
+// Absurd Micro-Startup Pitch-Off (remake entry).
 //
-// The program writes exactly one sentence (under 200 characters) pitching
-// an absurdly specific micro-startup for lazy AI agents to
-// $MAKEFUN_OUTPUT_DIR/entry.txt, then reads the file back and verifies
-// the bytes it wrote. Deterministic: the same input always yields the
-// same bytes, so two runs produce byte-identical output.
+// Run it and it drops one sentence into the output directory:
+// the pitch for a marketplace where a lazy agent lists the task it
+// gave up on, a hungrier agent buys it cheap, and HalfDone pockets
+// ten percent of every handover. Node 24, standard library only.
+// Nothing random, nothing from the clock or the network, so the file
+// it writes is the same byte for byte on every run.
 
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The pitch: one sentence, 181 characters. The niche is absurdly specific
-// (a marketplace where half-finished tasks are resold instead of done),
-// the buyer is plausible (hungrier agents with idle capacity), and the
-// business case is plain (a 10% cut every time a job changes hands).
-const PITCH =
+const LINE =
   "HalfDone is a marketplace where lazy agents sell their half-finished tasks to hungrier agents at a discount, taking a 10% cut every time a job changes hands instead of getting done.";
 
-function fail(message: string): never {
-  console.error(`error: ${message}`);
+const outDir = process.env.MAKEFUN_OUTPUT_DIR;
+if (!outDir) {
+  console.error("MAKEFUN_OUTPUT_DIR is not set");
   process.exit(1);
 }
 
-function main(): void {
-  const outputDir = process.env.MAKEFUN_OUTPUT_DIR;
-  if (!outputDir) {
-    fail("MAKEFUN_OUTPUT_DIR is not set");
-  }
-
-  // Gate validation, mirroring the competition's sealed scorer:
-  // entry.txt must be UTF-8 text of 1 to 200 characters, not only
-  // whitespace, and a single sentence.
-  const chars = [...PITCH];
-  if (chars.length < 1 || chars.length > 200) {
-    fail(`pitch is ${chars.length} characters, must be 1-200`);
-  }
-  if (PITCH.trim().length === 0) {
-    fail("pitch is only whitespace");
-  }
-  if (PITCH.trim().split(/[.!?]+/).filter(Boolean).length !== 1) {
-    fail("pitch must be exactly one sentence");
-  }
-
-  mkdirSync(outputDir, { recursive: true });
-  const outPath = join(outputDir, "entry.txt");
-  writeFileSync(outPath, PITCH, "utf8");
-
-  // Read-back verification: the bytes on disk must be exactly the pitch.
-  const readBack = readFileSync(outPath, "utf8");
-  if (readBack !== PITCH) {
-    fail("read-back mismatch: entry.txt does not match the pitch");
-  }
-
-  const sha256 = createHash("sha256").update(readBack, "utf8").digest("hex");
-  const byteLength = Buffer.byteLength(readBack, "utf8");
-  console.log(`wrote ${outPath}`);
-  console.log(`characters: ${chars.length}`);
-  console.log(`bytes: ${byteLength}`);
-  console.log(`sha256: ${sha256}`);
-  if (byteLength !== chars.length) {
-    // ASCII pitch, so bytes must equal characters; a mismatch would mean
-    // a non-ASCII character slipped in and the gate's character count
-    // could differ from the byte count.
-    fail(`byte length ${byteLength} differs from character count ${chars.length}`);
-  }
+// The sealed scorer's gate, checked here first: one sentence, UTF-8,
+// between 1 and 200 characters, and more than blank space.
+const glyphs = [...LINE];
+const sentenceCount = LINE.trim().split(/[.!?]+/).filter((part) => part.trim().length > 0).length;
+if (glyphs.length > 200 || glyphs.length < 1) {
+  console.error(`pitch is ${glyphs.length} characters, gate wants 1-200`);
+  process.exit(1);
+}
+if (LINE.trim().length === 0 || sentenceCount !== 1) {
+  console.error("pitch must be one non-blank sentence");
+  process.exit(1);
 }
 
-main();
+mkdirSync(outDir, { recursive: true });
+const target = join(outDir, "entry.txt");
+writeFileSync(target, LINE, "utf8");
+
+// Prove the write landed exactly: read it back and compare.
+const back = readFileSync(target, "utf8");
+if (back !== LINE) {
+  console.error("read-back mismatch");
+  process.exit(1);
+}
+
+const digest = createHash("sha256").update(back, "utf8").digest("hex");
+console.log(`entry written to ${target}`);
+console.log(`characters: ${glyphs.length}`);
+console.log(`sha256: ${digest}`);
